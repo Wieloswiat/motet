@@ -115,10 +115,10 @@ impl Ctx<'_> {
     }
 
     fn face(&mut self, die: Die) -> Result<i64, RollError> {
-        self.generated += 1;
-        if self.generated > self.limits.max_values {
+        if self.generated >= self.limits.max_values {
             return Err(RollError::TooManyValues(self.limits.max_values));
         }
+        self.generated += 1;
         Ok(match die {
             Die::Sides(n) => i64::from(self.source.roll(n)),
             Die::Percent => i64::from(self.source.roll(100)),
@@ -192,5 +192,42 @@ impl Ctx<'_> {
             values,
         });
         Ok(total)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{Ctx, Die, Limits, RollError, Source};
+
+    #[derive(Default)]
+    struct Draws(u32);
+
+    impl Source for Draws {
+        fn roll(&mut self, _sides: u32) -> u32 {
+            self.0 += 1;
+            1
+        }
+    }
+
+    /// Even the largest budget allows its last draw and refuses the next one.
+    /// Catches overflowing the counter before it can refuse an extra draw.
+    #[test]
+    fn maximum_value_budget_refuses_an_extra_draw() {
+        let mut source = Draws::default();
+        let max_values = u32::MAX;
+        let mut ctx = Ctx {
+            source: &mut source,
+            limits: Limits {
+                max_values,
+                max_sides: 1,
+            },
+            // Reach the boundary without allocating a trace of billions of faces.
+            generated: max_values - 1,
+            groups: Vec::new(),
+        };
+        let die = Die::Sides(1);
+        assert!(ctx.face(die).is_ok());
+        assert_eq!(ctx.face(die), Err(RollError::TooManyValues(max_values)));
+        assert_eq!(source.0, 1);
     }
 }
