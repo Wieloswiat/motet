@@ -4,11 +4,11 @@ import fc from 'fast-check';
 import { base58btc } from 'multiformats/bases/base58';
 import { describe, expect, it, vi } from 'vitest';
 import { signGenesis } from './index.js';
+import { isRepositoryKey } from './repository-key.js';
 
 const handle = 'world.motet.test';
 const tenor = 'https://tenor.motet.test';
 const rotationKey = 'did:key:zQ3shhCGUqDKjStzuDxPkTxN6ujddP4RkEKJJouJGRRkaLGbg';
-const compactSignature = Buffer.alloc(64, 1).toString('base64url');
 const limit = 2n ** 256n;
 
 const curves = [
@@ -36,62 +36,61 @@ if (process.env.FC_SEED !== undefined) settings.seed = Number(process.env.FC_SEE
 
 if (process.env.FC_PATH !== undefined) settings.path = process.env.FC_PATH;
 
+function repositoryDidKey(tag: readonly number[], point: string): string {
+	return `did:key:${base58btc.encode(Buffer.concat([Buffer.from(tag), Buffer.from(point, 'hex')]))}`;
+}
+
 describe('PLC genesis repository keys', () => {
-	// A sign request must not bind the World to a point that cannot verify repo commits.
-	// Checking only the multicodec and length would sign genesis with off-curve points.
-	it.each(curves)(
-		'allows signing for exactly the valid compressed $name points',
-		async ({ name, field, tag }) => {
-			const xCoordinate = fc.oneof(
-				fc.bigInt({ min: 0n, max: limit - 1n }),
-				fc.constantFrom(0n, 1n, field - 1n, field, field + 1n, limit - 1n)
-			);
+	// Checking only the multicodec and length would accept off-curve points.
+	it.each(curves)('accepts exactly the valid compressed $name points', ({ name, field, tag }) => {
+		const xCoordinate = fc.oneof(
+			fc.bigInt({ min: 0n, max: limit - 1n }),
+			fc.constantFrom(0n, 1n, field - 1n, field, field + 1n, limit - 1n)
+		);
 
-			await fc.assert(
-				fc.asyncProperty(xCoordinate, fc.constantFrom('02', '03'), async (x, prefix) => {
-					const point = `${prefix}${x.toString(16).padStart(64, '0')}`;
+		fc.assert(
+			fc.property(xCoordinate, fc.constantFrom('02', '03'), (x, prefix) => {
+				const point = `${prefix}${x.toString(16).padStart(64, '0')}`;
 
-					const atproto = `did:key:${base58btc.encode(Buffer.concat([Buffer.from(tag), Buffer.from(point, 'hex')]))}`;
+				expect(isRepositoryKey(repositoryDidKey(tag, point))).toBe(isPublicPoint(point, name));
+			}),
+			{
+				...settings,
+				examples: [
+					[0n, '02'],
+					[1n, '02'],
+					[field, '03']
+				]
+			}
+		);
+	});
 
-					const operation = {
-						type: 'plc_operation',
-						prev: null,
-						rotationKeys: [rotationKey],
-						alsoKnownAs: [`at://${handle}`],
-						verificationMethods: { atproto },
-						services: { atproto_pds: { type: 'AtprotoPersonalDataServer', endpoint: tenor } }
-					};
+	// Validation must gate the signer, or it could bind a World to a key that cannot verify commits.
+	it('refuses a well-formed off-curve key before asking the owner to sign', async () => {
+		// x=0 does not have a corresponding y on secp256k1.
+		const atproto = repositoryDidKey([0xe7, 0x01], `02${'00'.repeat(32)}`);
 
-					const signer = vi.fn(async () => compactSignature);
+		const operation = {
+			type: 'plc_operation',
+			prev: null,
+			rotationKeys: [rotationKey],
+			alsoKnownAs: [`at://${handle}`],
+			verificationMethods: { atproto },
+			services: { atproto_pds: { type: 'AtprotoPersonalDataServer', endpoint: tenor } }
+		};
 
-					const result = signGenesis(
-						operation,
-						Buffer.from(encode(operation)).toString('base64url'),
-						rotationKey,
-						handle,
-						tenor,
-						signer
-					);
+		const signer = vi.fn(async () => 'unused');
 
-					if (isPublicPoint(point, name)) {
-						await expect(result).resolves.toMatchObject({
-							signedOperation: { verificationMethods: { atproto } }
-						});
-						expect(signer).toHaveBeenCalledOnce();
-					} else {
-						await expect(result).rejects.toThrow('Invalid PLC signing key');
-						expect(signer).not.toHaveBeenCalled();
-					}
-				}),
-				{
-					...settings,
-					examples: [
-						[0n, '02'],
-						[1n, '02'],
-						[field, '03']
-					]
-				}
-			);
-		}
-	);
+		await expect(
+			signGenesis(
+				operation,
+				Buffer.from(encode(operation)).toString('base64url'),
+				rotationKey,
+				handle,
+				tenor,
+				signer
+			)
+		).rejects.toThrow('Invalid PLC signing key');
+		expect(signer).not.toHaveBeenCalled();
+	});
 });
