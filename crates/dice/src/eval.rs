@@ -15,6 +15,7 @@ pub trait Source {
 pub struct Limits {
     /// Every value generated counts, explosions included.
     pub max_values: u32,
+    /// The maximum number of possible faces on any die, regardless of notation.
     pub max_sides: u32,
 }
 
@@ -119,17 +120,17 @@ impl Ctx<'_> {
             return Err(RollError::TooManyValues(self.limits.max_values));
         }
         self.generated += 1;
+        let face = i64::from(self.source.roll(die.side_count()));
         Ok(match die {
-            Die::Sides(n) => i64::from(self.source.roll(n)),
-            Die::Percent => i64::from(self.source.roll(100)),
-            Die::Fudge => i64::from(self.source.roll(3)) - 2,
+            Die::Sides(_) | Die::Percent => face,
+            Die::Fudge => face - 2,
         })
     }
 
     fn dice(&mut self, d: &Dice) -> Result<i64, RollError> {
         match d.die {
             Die::Sides(0) => return Err(RollError::Empty),
-            Die::Sides(n) if n > self.limits.max_sides => {
+            die if die.side_count() > self.limits.max_sides => {
                 return Err(RollError::TooManySides(self.limits.max_sides));
             }
             Die::Sides(1) | Die::Fudge if d.explode => return Err(RollError::Explode(d.to_string())),

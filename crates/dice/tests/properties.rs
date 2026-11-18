@@ -594,15 +594,30 @@ fn successes_count_only_kept_dice() {
     assert_eq!(total("3d6!kl2>=5", &[6, 2, 5, 1]), Ok(0));
 }
 
+/// The cap applies to face count, not notation. Catches special dice skipping
+/// the cap or drawing a face before they are refused.
 #[test]
-fn sides_limit_is_inclusive() {
-    let limits = Limits {
-        max_sides: 20,
-        ..Limits::default()
-    };
-    let roll = |text: &str| parse(text).expect("valid").roll(&mut Faces::new(&[1]), limits);
-    assert!(roll("1d20").is_ok());
-    assert_eq!(roll("1d21").err(), Some(RollError::TooManySides(20)));
+fn side_limit_is_inclusive_for_every_notation() {
+    for (sides, notations) in [(100, ["d100", "d%"]), (3, ["d3", "dF"])] {
+        for text in notations {
+            let expr = parse(text).expect("valid notation");
+            let limits = Limits {
+                max_values: 1,
+                max_sides: sides,
+            };
+            assert!(expr.roll(&mut Faces::new(&[1]), limits).is_ok(), "{text}");
+
+            let max_sides = sides - 1;
+            let limits = Limits { max_sides, ..limits };
+            let mut source = Faces::new(&[1]);
+            assert_eq!(
+                expr.roll(&mut source, limits),
+                Err(RollError::TooManySides(max_sides)),
+                "{text}"
+            );
+            assert_eq!(source.0.len(), 1, "{text} drew a face before refusing the roll");
+        }
+    }
 }
 
 #[test]
