@@ -40,10 +40,12 @@ from the scratch package without offline mode. Allow time for the first
 compile of `creusot-std`. Compiling to Coma without running the solver is not
 a proof.
 
-The first run reached `creusot-std` compilation and exceeded a 300-second
-wall-clock limit on a shared host. The replay recipe reproduced the same
-annotated input byte for byte. No solver result was available at the time
-this recipe was prepared.
+Neither attempt reached the solver on this shared host. The first reached its
+300-second deadline compiling `creusot-std`. The second was stopped after
+821 seconds in the same dependency, before Creusot generated any goals for
+`decide`. The recipe reproduced the annotated input byte for byte, but there
+is no Creusot proof or counterexample from these runs. Try a cached build of
+`creusot-std` before comparing solver times.
 
 ## What the contract checks
 
