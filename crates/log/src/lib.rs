@@ -34,6 +34,9 @@ use thiserror::Error;
 /// A position in the log. Segments are numbered from zero without gaps.
 pub type Seq = u64;
 
+// A u64 has at most 20 decimal digits.
+const SEGMENT_DIGITS: usize = 20;
+
 #[derive(Debug, Error)]
 pub enum AppendError {
     /// Another writer holds this position. This writer must stop: it no longer
@@ -61,6 +64,7 @@ pub enum ReadError {
 }
 
 /// A log under one prefix of a bucket.
+/// Only immediate children with canonical segment names belong to this log.
 #[derive(Clone, Debug)]
 pub struct Log {
     store: Arc<dyn ObjectStore>,
@@ -77,7 +81,7 @@ impl Log {
 
     fn key(&self, seq: Seq) -> Path {
         // Zero-padded so lexicographic listing is numeric order.
-        self.prefix.clone().join(format!("{seq:020}"))
+        self.prefix.clone().join(format!("{seq:0SEGMENT_DIGITS$}"))
     }
 
     /// Positions present in the bucket, in order.
@@ -85,7 +89,16 @@ impl Log {
         let mut seqs: Vec<Seq> = self
             .store
             .list(Some(&self.prefix))
-            .map_ok(|meta| meta.location.filename().and_then(|f| f.parse::<Seq>().ok()))
+            .map_ok(|meta| {
+                // Object-store listings include subdirectories, which can hold other logs.
+                let mut parts = meta.location.prefix_match(&self.prefix)?;
+                let name = parts.next()?;
+                let name = name.as_ref();
+                if parts.next().is_some() || name.len() != SEGMENT_DIGITS || !name.bytes().all(|b| b.is_ascii_digit()) {
+                    return None;
+                }
+                name.parse::<Seq>().ok()
+            })
             .try_collect::<Vec<_>>()
             .await?
             .into_iter()

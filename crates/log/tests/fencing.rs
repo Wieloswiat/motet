@@ -125,6 +125,75 @@ proptest! {
     }
 }
 
+/// A nested log cannot supply positions to its parent. Parsing the last path
+/// component of a recursive listing makes replay or takeover see the wrong log.
+#[tokio::test]
+async fn nested_logs_do_not_supply_each_others_positions() {
+    assert_nested_log_isolation(Arc::new(InMemory::new())).await;
+}
+
+async fn assert_nested_log_isolation(store: Arc<dyn ObjectStore>) {
+    let parent = Log::new(Arc::clone(&store), "worlds");
+    // The directory itself looks like a segment name, but the object is below it.
+    let child = Log::new(store, "worlds/00000000000000000007");
+    let child_batch = Bytes::from_static(b"child history");
+    child
+        .writer()
+        .await
+        .expect("child writer")
+        .append(child_batch.clone())
+        .await
+        .expect("append to child");
+
+    let parent_batch = Bytes::from_static(b"parent history");
+    assert_eq!(
+        parent
+            .writer()
+            .await
+            .expect("parent writer")
+            .append(parent_batch.clone())
+            .await
+            .expect("append to parent"),
+        0,
+    );
+    assert_eq!(parent.read_from(0).await.expect("parent replay"), [(0, parent_batch)]);
+    assert_eq!(child.read_from(0).await.expect("child replay"), [(0, child_batch)]);
+}
+
+/// A numeric filename is not a segment unless it is a canonical log key.
+/// Parsing an alias as a position can manufacture a gap or move the writer's head.
+#[tokio::test]
+async fn noncanonical_numeric_names_do_not_supply_positions() {
+    let store: Arc<dyn ObjectStore> = Arc::new(InMemory::new());
+    let log = Log::new(Arc::clone(&store), "shard");
+    for alias in ["shard/0", "shard/+0000000000000000008"] {
+        store
+            .put(&Path::from(alias), Bytes::from_static(b"not a segment").into())
+            .await
+            .expect("write a non-segment object");
+    }
+
+    let batch = Bytes::from_static(b"real segment");
+    assert_eq!(
+        log.writer()
+            .await
+            .expect("writer")
+            .append(batch.clone())
+            .await
+            .expect("append at the first position"),
+        0,
+    );
+    assert_eq!(log.read_from(0).await.expect("replay"), [(0, batch)]);
+}
+
+/// The real store lists nested objects recursively too. A child log must not
+/// create gaps in its parent's history on that backend.
+#[tokio::test]
+#[ignore = "integration: needs S3 (devenv up)"]
+async fn fault_nested_logs_against_real_bucket() {
+    assert_nested_log_isolation(motet_testkit::services::bucket()).await;
+}
+
 /// The same race against the real bucket: this is also what checks that the
 /// development and CI object store implements create-only PUTs.
 #[tokio::test]

@@ -3263,6 +3263,7 @@ dependencies = [
 name = "motet-log"
 version = "0.0.0"
 dependencies = [
+ "async-trait",
  "bytes",
  "futures",
  "motet-testkit",

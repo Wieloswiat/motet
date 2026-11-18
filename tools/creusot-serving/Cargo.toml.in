@@ -1,0 +1,14 @@
+[package]
+name = "motet-serving-creusot"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+creusot-std = "=0.14.0"
+serde = { version = "=1.0.229", features = ["derive"] }
+
+[lints.rust]
+unexpected_cfgs = { level = "deny", check-cfg = ['cfg(kani)'] }
+
+[workspace]

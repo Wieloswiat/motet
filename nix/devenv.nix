@@ -582,19 +582,31 @@ in
       description = "Prove the Spaces serving properties with pinned Kani, Rust and CBMC";
       exec = ''
         set -euo pipefail
-        export PATH="${kani}/bin:$PATH"
         report=target/kani/proofs.json
         mkdir -p target/kani
         rm -f "$report"
-        ${rustToolchain}/bin/cargo kani -p motet-spaces --lib -Z unstable-options --export-json "$report"
-        # Kani accepts a crate with no harnesses. Missing or incomplete proofs
-        # must fail this gate, not silently become a successful empty run.
+        # Cargo can prefer a user-installed subcommand over the one on PATH.
+        ${kani}/bin/cargo-kani kani -p motet-spaces --lib -Z unstable-options --export-json "$report"
+        # Kani reports only the harnesses it found. A successful run can still
+        # omit a serving check if its proof attribute is removed by mistake.
         ${pkgs.jq}/bin/jq --exit-status '
           .verification_results as $proofs
-          | $proofs.summary.total_harnesses > 0
-            and $proofs.summary.executed == $proofs.summary.total_harnesses
-            and ($proofs.results | length) == $proofs.summary.total_harnesses
-            and all($proofs.results[]; .status == "Success")
+          | ($proofs.results | map(.harness_id)) as $names
+          | ([
+              "serving::proofs::clock_extremes_preserve_access_window",
+              "serving::proofs::fresh_access_including_deadline_is_served",
+              "serving::proofs::future_or_expired_access_is_stale",
+              "serving::proofs::missing_or_revoked_access_is_refused"
+            ] - $names) as $missing
+          | if ($missing | length) != 0 then
+              error("missing Kani harness results: \($missing | join(", "))")
+            else
+              $proofs.summary.status == "completed"
+              and $proofs.summary.executed == $proofs.summary.total_harnesses
+              and ($names | length) == $proofs.summary.total_harnesses
+              and ($names | unique | length) == ($names | length)
+              and all($proofs.results[]; .status == "Success")
+            end
         ' "$report"
       '';
     };

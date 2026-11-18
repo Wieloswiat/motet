@@ -33,6 +33,8 @@
 		"@sveltejs/vite-plugin-svelte": "^7.2.0",
 		"@types/node": "^24",
 		"@vitest/browser-playwright": "^4.1.8",
+		"fast-check": "^4.10.2",
+		"multiformats": "^14.0.5",
 		"playwright": "^1.60.0",
 		"svelte": "^5.57.1",
 		"svelte-check": "^4.6.0",

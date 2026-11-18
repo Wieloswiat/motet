@@ -3,7 +3,9 @@
 
 mod support;
 
-use motet_rules::view::{Op, RepoEvent, WorldView};
+use motet_rules::view::{Op, RepoEvent, Shown, WorldView};
+use motet_rules::world::{Admission, Place};
+use motet_rules::{Cid, StrongRef};
 use motet_testkit::delivery::deliveries;
 use proptest::prelude::*;
 use support::{Action, SCENES, history, run, scene, world_did};
@@ -24,8 +26,96 @@ fn history_and_delivery() -> impl Strategy<Value = (Vec<Action>, Vec<RepoEvent>)
     })
 }
 
+/// One published admission amid several versions in the author's repo. The
+/// network can deliver the two streams independently and repeat old events.
+/// Start each clock at zero, near its maximum, or away from either boundary.
+fn admitted_edit() -> impl Strategy<Value = (usize, Vec<RepoEvent>)> {
+    let first_rev = || prop_oneof![Just(0), Just(u64::MAX), any::<u64>()];
+    (
+        1usize..=8,
+        any::<prop::sample::Index>(),
+        any::<bool>(),
+        first_rev(),
+        first_rev(),
+    )
+        .prop_flat_map(|(versions, which, delete, author_rev, world_rev)| {
+            let admitted = which.index(versions);
+            let author_rev = author_rev.min(u64::MAX - versions as u64);
+            let uri = support::post_uri(0, 0);
+            let version = |i: usize| StrongRef::new(uri.clone(), Cid::new(format!("cid-{i}")));
+            let author = support::author(0);
+            let scene = scene(0);
+            let mut writes = (0..versions)
+                .map(|i| RepoEvent {
+                    repo: author.clone(),
+                    rev: author_rev + i as u64,
+                    op: Op::PutPost {
+                        post: version(i),
+                        scene: scene.clone(),
+                        body: format!("text {i}"),
+                    },
+                })
+                .collect::<Vec<_>>();
+            let admission = Admission {
+                post: version(admitted),
+                author: author.clone(),
+                scene,
+                place: Place { epoch: 0, seq: 0 },
+                authority_rev: 1,
+                replaces: None,
+            };
+            if delete {
+                writes.push(RepoEvent {
+                    repo: author,
+                    rev: author_rev + versions as u64,
+                    op: Op::DeletePost { uri },
+                });
+            }
+            let world = RepoEvent {
+                repo: world_did(),
+                rev: world_rev,
+                op: Op::PutAdmission(admission),
+            };
+            (Just(admitted), deliveries(vec![writes, vec![world]], 4))
+        })
+}
+
 proptest! {
     #![proptest_config(ProptestConfig::with_cases(512))]
+
+    /// Check each prefix, not only convergence: two readers could agree on the
+    /// wrong body. An unadmitted edit must not replace the admitted text, and
+    /// an old delivery after deletion must not restore it.
+    #[test]
+    fn a_reader_sees_only_the_exact_admitted_text((admitted, events) in admitted_edit()) {
+        let cid = Cid::new(format!("cid-{admitted}"));
+        let mut view = WorldView::new(world_did());
+        let (mut admission_seen, mut post_seen, mut version_seen, mut deleted) = (false, false, false, false);
+        for e in &events {
+            view.apply(e);
+            match &e.op {
+                Op::PutPost { post, .. } => {
+                    post_seen = true;
+                    version_seen |= post.cid == cid;
+                }
+                Op::DeletePost { .. } => deleted = true,
+                Op::PutAdmission(_) => admission_seen = true,
+                Op::CloseAdmission(_) => unreachable!("the World publishes only the admission"),
+            }
+            let expected = if !admission_seen || !post_seen {
+                None
+            } else if deleted {
+                Some(Shown::Tombstone)
+            } else if version_seen {
+                Some(Shown::Version { cid: cid.clone(), body: format!("text {admitted}") })
+            } else {
+                Some(Shown::Unavailable { cid: cid.clone() })
+            };
+            let entries = view.scene(&scene(0));
+            prop_assert!(entries.len() <= 1);
+            prop_assert_eq!(entries.first().map(|e| &e.shown), expected.as_ref(), "after {:?}", e);
+        }
+    }
 
     #[test]
     fn any_delivery_order_shows_the_same_scenes((actions, delivered) in history_and_delivery()) {
@@ -111,4 +201,21 @@ proptest! {
             prop_assert_eq!(view.pending(&author), expected);
         }
     }
+}
+
+/// A first revision of zero is a write, not a redelivery of an implicit cursor.
+#[test]
+fn a_first_revision_of_zero_is_visible_to_its_author() {
+    let author = support::author(0);
+    let post = motet_rules::StrongRef::new(support::post_uri(0, 0), motet_rules::Cid::new("first"));
+    let event = RepoEvent {
+        repo: author.clone(),
+        rev: 0,
+        op: Op::PutPost {
+            post: post.clone(),
+            scene: scene(0),
+            body: "opening".into(),
+        },
+    };
+    assert_eq!(view_of(&[event]).pending(&author), [post]);
 }

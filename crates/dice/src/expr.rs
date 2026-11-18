@@ -40,11 +40,18 @@ pub enum Die {
 }
 
 impl Die {
+    pub(crate) const fn side_count(self) -> u32 {
+        match self {
+            Self::Sides(n) => n,
+            Self::Percent => 100,
+            Self::Fudge => 3,
+        }
+    }
+
     #[must_use]
     pub fn faces(self) -> (i64, i64) {
         match self {
-            Self::Sides(n) => (1, i64::from(n)),
-            Self::Percent => (1, 100),
+            Self::Sides(_) | Self::Percent => (1, i64::from(self.side_count())),
             Self::Fudge => (-1, 1),
         }
     }
