@@ -7,9 +7,8 @@
 //! reader stops being served until it can. A revocation Motet knows about
 //! takes effect immediately, whatever the bound.
 //!
-//! This covers every serving path: pages, cached pages, media, downloads,
-//! search, the live stream's replay and queued notifications all ask
-//! [`decide`] before handing anything over.
+//! [`decide`] checks freshness only. Callers must also bind the verification
+//! to the reader and the Space, and check access before releasing content.
 
 use serde::{Deserialize, Serialize};
 
