@@ -14,6 +14,7 @@ object_store.workspace = true
 thiserror.workspace = true
 
 [dev-dependencies]
+async-trait.workspace = true
 motet-testkit = { workspace = true, features = ["services"] }
 proptest.workspace = true
 tokio.workspace = true
