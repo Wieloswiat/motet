@@ -112,3 +112,20 @@ proptest! {
         }
     }
 }
+
+/// A first revision of zero is a write, not a redelivery of an implicit cursor.
+#[test]
+fn a_first_revision_of_zero_is_visible_to_its_author() {
+    let author = support::author(0);
+    let post = motet_rules::StrongRef::new(support::post_uri(0, 0), motet_rules::Cid::new("first"));
+    let event = RepoEvent {
+        repo: author.clone(),
+        rev: 0,
+        op: Op::PutPost {
+            post: post.clone(),
+            scene: scene(0),
+            body: "opening".into(),
+        },
+    };
+    assert_eq!(view_of(&[event]).pending(&author), [post]);
+}

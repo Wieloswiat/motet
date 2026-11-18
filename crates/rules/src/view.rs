@@ -108,11 +108,14 @@ impl WorldView {
     }
 
     pub fn apply(&mut self, event: &RepoEvent) {
-        let seen = self.revs.entry(event.repo.clone()).or_default();
-        if event.rev <= *seen {
-            return;
+        if let Some(seen) = self.revs.get_mut(&event.repo) {
+            if event.rev <= *seen {
+                return;
+            }
+            *seen = event.rev;
+        } else {
+            self.revs.insert(event.repo.clone(), event.rev);
         }
-        *seen = event.rev;
 
         match &event.op {
             Op::PutPost { post, body, .. } => {
