@@ -1,0 +1,13 @@
+use creusot_std::prelude::*;
+
+#[ensures(match verified {
+    None | Some(Verified { revoked: true, .. }) => match result {
+        Decision::Refuse => true,
+        _ => false,
+    },
+    Some(Verified { at_millis, revoked: false }) => match result {
+        Decision::Refuse => false,
+        Decision::Serve => at_millis@ <= now_millis@ && now_millis@ <= at_millis@ + bound_millis@,
+        Decision::Stale => now_millis@ < at_millis@ || at_millis@ + bound_millis@ < now_millis@,
+    },
+})]
