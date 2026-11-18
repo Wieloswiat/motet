@@ -328,26 +328,36 @@ proptest! {
         prop_assert_eq!(actual.map(|roll| roll.total), expected);
     }
 
-    /// Legal maximum-width dice still return their full face; zero and sides
-    /// beyond a caller's limit fail. Catches truncation and an exclusive side cap.
+    /// A die fits the cap exactly when its nonzero face count fits, regardless
+    /// of notation. Catches truncated faces, exclusive caps, and special dice bypassing the cap.
     #[test]
     fn public_dice_side_boundaries_preserve_faces_and_refuse_invalid_sides(
-        sides in prop_oneof![Just(0), Just(1), Just(u32::MAX - 1), Just(u32::MAX), any::<u32>()],
-        max_sides in prop_oneof![Just(0), Just(1), Just(u32::MAX - 1), Just(u32::MAX)],
+        sides in prop_oneof![Just(0), Just(1), Just(3), Just(100), Just(u32::MAX - 1), Just(u32::MAX), any::<u32>()],
+        cap in prop_oneof![Just(0), Just(1), Just(u32::MAX - 1), Just(u32::MAX), any::<u32>()],
         maximum_face in any::<bool>(),
     ) {
-        let expr = Expr::Dice(Dice { count: 1, die: Die::Sides(sides), explode: false, keep: None, success: None });
-        let face = if maximum_face { sides } else { 1 };
-        let expected = if sides == 0 {
-            Err(RollError::Empty)
-        } else if sides > max_sides {
-            Err(RollError::TooManySides(max_sides))
-        } else {
-            Ok(i64::from(face))
+        let special = match sides {
+            3 => Some((Die::Fudge, -2)),
+            100 => Some((Die::Percent, 0)),
+            _ => None,
         };
-        let script = if expected.is_ok() { vec![face] } else { Vec::new() };
-        let actual = expr.roll(&mut Faces::new(&script), Limits { max_values: 1, max_sides });
-        prop_assert_eq!(actual.map(|roll| roll.total), expected);
+        let face = if maximum_face { sides } else { 1 };
+        for (die, offset) in std::iter::once((Die::Sides(sides), 0)).chain(special) {
+            let expr = Expr::Dice(Dice { count: 1, die, explode: false, keep: None, success: None });
+            for max_sides in [cap, sides.saturating_sub(1), sides, sides.saturating_add(1)] {
+                let expected = if sides == 0 {
+                    Err(RollError::Empty)
+                } else if sides > max_sides {
+                    Err(RollError::TooManySides(max_sides))
+                } else {
+                    Ok(i64::from(face) + offset)
+                };
+                let mut source = Faces::new(&[face.max(1)]);
+                let actual = expr.roll(&mut source, Limits { max_values: 1, max_sides });
+                prop_assert_eq!(source.0.is_empty(), expected.is_ok(), "{:?}, cap {}: draw count", die, max_sides);
+                prop_assert_eq!(actual.map(|roll| roll.total), expected, "{:?}, cap {}", die, max_sides);
+            }
+        }
     }
 
     /// Zero and maximum keep/drop operands saturate over the actual dice.
