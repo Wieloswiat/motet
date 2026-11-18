@@ -102,15 +102,23 @@ That warning does not disable saving or replay.
 default for every `proptest!` test. `nix flake check` sets it to 256, so every
 property runs 256 cases there, with a new random seed each time. `soak` runs
 the default suites in release mode with 20000 cases, or the number you give
-it.
+it. To explore just one property without increasing the cost of the slower
+suites, use a nextest filter. For example:
+
+```sh
+PROPTEST_CASES=10000 cargo nextest run -p motet-rules -E 'test(=a_reader_sees_only_the_exact_admitted_text)'
+```
 
 ### TypeScript properties
 
 Use [fast-check](https://github.com/dubzzz/fast-check) with Vitest for pure
 TypeScript logic. Generate inputs at boundaries and assert a mathematical,
 domain or metamorphic property. Do not copy the implementation into an oracle.
-The design package checks contrast symmetry, bounds and reference values,
-alongside the real themes' accessibility requirements.
+The design package checks contrast symmetry, bounds and reference values.
+The web app also checks PLC genesis keys: fast-check generates compressed
+points for both supported curves, and Node's OpenSSL decoder supplies the
+expected verdict. A malformed key must not reach the signing callback. The
+browser tests still exercise the real WebCrypto signer.
 
 Normal runs vary the seed. On failure, retain the reported seed and shrink
 path so the smallest counterexample can be replayed. Mutation runs use a
@@ -281,6 +289,8 @@ freshness bounds. Kani's CBMC result checks every execution of each harness
 under its assertions. This is partial correctness: it does not show that
 callers supply valid or synchronized clocks. The harnesses cover freshness,
 revocation and clock boundaries, not private AppView serving or network behavior.
+The command checks `target/kani/proofs.json` for all four named results. A
+successful run of just the remaining harnesses is not a successful `proofs` run.
 
 For any adopted proof:
 
@@ -298,6 +308,24 @@ Do not impose a proof gate on the whole async application. Creusot remains an
 alternative for properties that need richer specifications than Kani's harness
 assertions can express.
 
+### Comparing the verifiers
+
+The [Creusot pilot](../tools/creusot-serving/README.md) applies one postcondition
+to the same `decide` implementation outside the Cargo workspace. It expresses
+the deadline as a sum of mathematical integers. Kani uses ordinary Rust
+assertions, widened arithmetic and symbolic `u64` inputs. Both need a second
+Rust compiler; neither checks who supplied the verification or whether a
+handler releases bytes without calling `decide`.
+
+Keep Kani for this small, loop-free decision. Before adding a second verifier
+to CI, try a property where induction matters. For example: even if a die
+keeps exploding, `Expr::roll` must never request more faces than the caller's
+budget. State what the face source guarantees. For Kani, record how many loop
+iterations the harness covers; for Creusot, state how each draw reduces the
+remaining budget. Compare which code each tool checks, which assumptions it
+needs, and what it costs to rerun after a compiler upgrade. Keep generated
+roll histories and service tests regardless of that choice.
+
 ## Acceptance tests
 
 The backend plan's acceptance table, and where each stands. Tests that need
@@ -305,7 +333,7 @@ more than one part of Motet live in `crates/acceptance`.
 
 | Test                                                                                                                                                               | Status                                                                                                                                                                                                                                                            |
 | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Two consumers, different cross-repo orders, same posts in the same order                                                                                           | `rules/tests/view_convergence.rs`; public AppView admission and rebuild: `appview/tests/public_reads.rs`                                                                                                                                                          |
+| Two consumers, different cross-repo orders, same posts in the same order                                                                                           | `rules/tests/view_convergence.rs`: checks the admitted text after each delivery, including revision zero; public AppView admission and rebuild: `appview/tests/public_reads.rs`                                                                                   |
 | Remove a player while their post is in flight                                                                                                                      | Public scene: `acceptance/tests/removal_in_flight.rs`; removal during read-back: `tenor/tests/admission_service.rs`. Private scene waits on Spaces                                                                                                                |
 | Stop the tenor while players post, then restart                                                                                                                    | Replay and publication: `tenor/tests/shard.rs`, `tenor/tests/publication.rs`; outbox ordering and lost-response recovery: `appview/tests/post_writes.rs`                                                                                                          |
 | Admission for a post whose PDS write fails                                                                                                                         | `tenor/tests/admission.rs`, `tenor/tests/admission_service.rs`, `appview/tests/post_writes.rs`                                                                                                                                                                    |
@@ -337,11 +365,11 @@ more than one part of Motet live in `crates/acceptance`.
 | The same CID in two Spaces                                                                                                                                         | Types keep Space identity in references (`spaces`); the AppView output boundary releases bytes only for the exact reader and Space generation (`appview/tests/private_access.rs`). End to end to do                                                               |
 | Report a GM who can read the GM Space                                                                                                                              | To do                                                                                                                                                                                                                                                             |
 | Search with matching private documents                                                                                                                             | To do                                                                                                                                                                                                                                                             |
-| A second writer against the same bucket                                                                                                                            | `log/tests/fencing.rs` (including reads from the last representable position), `tenor/tests/shard.rs`                                                                                                                                                             |
+| A second writer against the same bucket                                                                                                                            | `log/tests/fencing.rs`: takeover, nested prefixes and cursor boundaries; `log/tests/reconciliation.rs`: lost write and read-back responses; `tenor/tests/shard.rs`                                                                                                |
 | A World's genesis lists the owner's rotation key first, the tenor's only by opt-in, and is accepted only signed by the owner                                       | `tenor/tests/identity.rs`: owner priority and compact low-S P-256 signatures over the reserved signing bytes                                                                                                                                                      |
 | Reservation retries recover the original; a new owner draft supersedes the old, while another owner cannot take its handle                                         | `tenor/tests/identity.rs`: exact retry, changed input, supersession and invalidated keys                                                                                                                                                                          |
 | Browser owner keys produce independently verified low-S signatures and encrypted backups reject tampering or a different World                                     | `apps/web/src/lib/owner-key/owner-key.svelte.test.ts`; re-import and request secrecy: `apps/web/e2e/journey.e2e.ts`                                                                                                                                               |
-| The browser refuses a substituted genesis before signing and derives the World's DID from the signed operation                                                     | `apps/web/src/lib/plc/plc.svelte.test.ts`: rotation key, handle, endpoint and signing-byte substitutions; Rust PLC fixture                                                                                                                                        |
+| The browser refuses a substituted genesis before signing and derives the World's DID from the signed operation                                                     | `apps/web/src/lib/plc/plc.svelte.test.ts`: substitutions and Rust PLC fixture; `genesis-key.test.ts`: generated keys checked against OpenSSL before signing                                                                                                       |
 | Lost World reservations retry with the same operation; after reload the same owner starts a new draft for the same handle                                          | `appview/tests/live_journey.rs`, `apps/web/e2e/journey.e2e.ts`: same reservation on retry and fresh attempt after reload                                                                                                                                          |
 | Service-auth audiences bind World creation to the tenor and admissions to the named World                                                                          | `tenor/tests/identity.rs`, `tenor/tests/admission_service.rs`, `tenor/tests/world_service_auth.rs`                                                                                                                                                                |
 | The tenor's public DID document identifies its configured service, not an attacker-supplied Host                                                                   | `tenor/tests/identity.rs`                                                                                                                                                                                                                                         |
