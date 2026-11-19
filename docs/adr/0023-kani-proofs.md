@@ -1,40 +1,55 @@
-# 0023. Use Kani for selected pure-function proofs
+# 0023. Try Kani on the Spaces access check
 
 Status: Proposed.
 
 ## Context
 
-Property tests explore sampled inputs. Some pure decisions have small input
-spaces at the bit level but large value domains, where a verifier can check
-symbolic inputs more broadly. Kani 0.68.0 uses CBMC and requires a matching
-nightly Rust compiler. Its compiler interface adds version-coupling and CI cost.
-A proof gate must stay limited to properties whose benefit exceeds that cost.
+`spaces::serving::decide` decides whether an access check is recent enough to
+serve private content. Property tests try many inputs, but not every possible
+timestamp. This small function is a useful place to try a proof tool.
 
-## Decision
+The testing guide originally named [Creusot](https://creusot.rs/) as a candidate.
+No Creusot proofs were implemented. Kani harnesses and Nix packaging were added
+later, but no comparison with Creusot was recorded. Their presence does not
+settle which tool Motet should adopt.
 
-Use the `proofs` devenv command to run Kani 0.68.0 for selected pure-function
-harnesses. `nix/pkgs/kani.nix` pins Kani, CBMC and its private nightly toolchain;
-production builds continue to use `rust-toolchain.toml`. The CI `proofs` job
-runs that same command and gates image publication.
+## Proposal
 
-The initial scope is `spaces::serving::decide`. Its harnesses check revocation,
-freshness and clock boundaries across symbolic full-width `u64` inputs. The
-function has no loops, so no unwinding bound applies. CBMC checks all executions
-of the harnesses under their assertions. This is partial correctness, not a
-proof that callers provide valid or synchronized clocks, and it does not prove
-private AppView serving or network behavior. Keep property and boundary tests.
+Keep the existing Kani experiment while the tool choice is open. Do not require
+it for image publication. The CI `proofs` job still reports failures; the image
+jobs depend only on `checks` and `gate`.
 
-## Consequences
+The `proofs` command runs four harnesses against the production function. A
+harness supplies inputs and checks assertions about the result. Here, Kani
+checks all possible `u64` values for the timestamps and freshness limit, rather
+than sampling them. It checks revocation, old checks, future timestamps and the
+exact freshness cutoff.
 
-The CI job adds verifier time and storage for `target/kani/proofs.json`. Kani's
-compiler components couple the verifier to its private nightly ABI; update the
-Kani release and nightly together. The package currently defines x86_64-linux,
-aarch64-linux and aarch64-darwin releases. Other platforms are unsupported until
-Nix packaging and the upstream release provide them.
+The function has no loops, so the check does not depend on a loop-iteration
+limit. It establishes that the results meet the harness assertions, assuming
+Kani and its underlying checker, CBMC, work correctly. It does not establish
+that a caller's clock is correct, or that private pages enforce the result.
+Property tests and tests of the real services remain necessary.
 
-## Revisit when
+## Cost and limits
 
-Revisit if the nightly ABI becomes unreliable, CI cost exceeds the value of the
-checked properties, a required platform lacks a Kani release, or a target
-property needs specifications Kani cannot express. Consider another verifier
-for that property rather than widening this gate to the async application.
+`nix/pkgs/kani.nix` pins Kani 0.68.0, CBMC and the nightly Rust compiler Kani
+needs. Production code still builds with `rust-toolchain.toml`. Updating Kani
+can also require updating its compiler. This adds CI time, downloads and a
+separate toolchain to maintain. The job saves its results in
+`target/kani/proofs.json`.
+
+The package has releases for x86_64 Linux, aarch64 Linux and aarch64 macOS. Other
+platforms need both an upstream release and Nix packaging.
+
+## Before adopting a tool
+
+Compare Kani and Creusot on the properties Motet needs to check. Record the
+assumptions, specification work, supported code and toolchain maintenance for
+each. Four passing harnesses are evidence about one function, not a reason to
+choose a verifier for the whole project.
+
+Revisit this experiment if compiler upgrades make it unreliable, its CI cost
+outweighs its value, a required platform is unsupported, or a new property needs
+a different proof method. Any future publication requirement needs a separate,
+explicit decision.

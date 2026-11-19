@@ -282,7 +282,7 @@ do not lower the threshold or exclude a whole mutator to hide a real gap.
 
 ## Formal proofs
 
-The `proofs` devenv command and CI job run Kani harnesses against the
+The experimental `proofs` devenv command and CI job run Kani harnesses against the
 production `spaces::serving::decide` function. The loop-free function has no
 unwinding bound. Harnesses quantify over full `u64` domains for clocks and
 freshness bounds. Kani's CBMC result checks every execution of each harness
@@ -303,10 +303,14 @@ For any adopted proof:
    PostgreSQL, S3, browser or operating-system behavior.
 6. Name the executed proof job when making a verification claim.
 
-Use proof gates only when the benefit exceeds their proof and maintenance cost.
-Do not impose a proof gate on the whole async application. Creusot remains an
-alternative for properties that need richer specifications than Kani's harness
-assertions can express.
+The proof job reports failures, but image publication depends only on `checks`
+and `gate`. Do not suppress proof failures to make them look successful.
+
+Creusot was the original candidate; the Kani experiment does not replace it as
+an agreed project-wide choice. Compare them before adopting a tool or making
+proofs a release requirement ([ADR 0023](adr/0023-kani-proofs.md)). Keep that
+decision separate from whether a particular set of assertions passes. Do not
+require proofs of the whole async application.
 
 ### Comparing the verifiers
 
