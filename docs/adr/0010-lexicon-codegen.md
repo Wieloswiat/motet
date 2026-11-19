@@ -1,24 +1,27 @@
-# 0010. Our own lexicon code generator
+# 0010. Generate Rust and TypeScript types from lexicons
 
 Status: Accepted
 
 ## Context
 
-Lexicons are the contract between Motet, tenors and independent clients, and
-both Rust and TypeScript need types from them. Generated types must keep
-unknown fields (records written by newer clients) and refuse dangling
-references.
+Lexicons describe the records and methods shared by Motet, tenors and
+independent clients. Rust and TypeScript both need types generated from
+them. Those types must retain unknown fields from newer clients, and the
+generator must reject references to missing definitions.
 
 ## Decision
 
-- `motet-lexgen` generates Rust (`crates/lexicons`) and TypeScript
-  (`packages/lexicons`) from `lexicons/`. Generated code is committed so it can
-  be reviewed; `lexgen-check` and a flake check fail when it is stale.
-- Generated types carry unknown fields through and write them back unchanged.
-- Motet's lexicons live under `at.motet.pilot.*` until they are stable; nothing
-  is promoted in place to a stable NSID.
-- Authorization is not in lexicons; it is in the XRPC registry.
+Use `motet-lexgen` to generate Rust types into `crates/lexicons` and TypeScript
+types into `packages/lexicons` from `lexicons/`.
+
+- Commit generated code for review. Make `lexgen-check` and a flake check
+  fail if it no longer matches the lexicons.
+- Preserve unknown fields when reading and writing records.
+- Keep Motet's lexicons under `at.motet.pilot.*` until stable. Do not turn a
+  pilot definition into a stable NSID in place; an NSID is the protocol name
+  that clients use to identify the definition.
+- Put authorization rules in the XRPC registry, not the lexicons.
 
 ## Revisit when
 
-atproto-crates' lexicon tooling generates what we need, including TypeScript.
+atproto-crates can generate the types we need in both Rust and TypeScript.

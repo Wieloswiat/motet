@@ -1,55 +1,59 @@
-# 0014. Tenor state in SlateDB, with the shard log as its only WAL
+# 0014. Store tenor state in SlateDB and replay from the shard log
 
 Status: Accepted. Builds on [0006](0006-storage.md), which deferred SlateDB.
 
 ## Context
 
-0006 made each shard's fenced log the tenor's durable record and kept state in
-memory, rebuilt by replaying from the start, with "SlateDB for current state
-and replay checkpoints" to come. Hosting World accounts
-([0013](0013-tenor-hosts-worlds.md)) makes that state large: repo blocks,
-record indexes, firehose history, sealed keys, Space repos and members. Replay
-from zero on every start no longer works, and a repo commit can't be replayed
-by re-running it, since signing and revisions aren't functions of the command.
+[0006](0006-storage.md) stores each shard's history in a fenced log and rebuilds
+in-memory state by replaying it from the start. It defers SlateDB for current
+state and replay checkpoints.
+
+Hosting World accounts ([0013](0013-tenor-hosts-worlds.md)) adds repo blocks,
+record indexes, firehose history, sealed keys, Space repositories and members.
+Replaying all of that on every start is too costly. Re-running a repo command
+also cannot reproduce its exact commit: signing and revision generation are
+not deterministic functions of that command.
 
 ## Decision
 
-- **One SlateDB (`=0.17.0`) per shard**, under `state/{shard}/` in the same
-  bucket and through the same object-store client as the log, with SlateDB's
-  own WAL disabled (`wal_disable`). The log stays the only write-ahead log, as
-  in vlpds.
-- **The log records effects.** Rules commands are still logged as commands
-  and replayed by re-running them, since they are deterministic. Every other
-  operation (World creation, key custody, repo commits, Space changes, OAuth
-  state) is logged as the key-value mutations and firehose events it
-  produced, and replay re-applies them.
-- **One writer runs every operation**, in order, against a staged overlay;
-  the batch is appended to the log as one segment, then written to SlateDB as
-  one batch with the applied marker and the segment's position as SlateDB's
-  sequence number, and only then are the outcomes returned. Acknowledged
-  still means durable in the log; SlateDB can only be behind it, never ahead.
-- **Checkpoints** write the rules snapshots and the applied marker, then
-  flush the memtable, every ~10 seconds when anything changed, which bounds
-  replay.
-- **Both fences stop the shard**: the log's create-only segment and SlateDB's
-  writer epoch. A SlateDB error after a durable append is fail-stop, and
-  replay repairs it.
-- Sealed key material lives in the same store, sealed under the tenor's
-  master key with XChaCha20-Poly1305. The master key is kept outside the
-  bucket.
+Store current shard state in SlateDB, but keep the shard log as the only
+write-ahead log (WAL).
+
+- Use one SlateDB, pinned to `=0.17.0`, per shard at `state/{shard}/`. Use
+  the log's bucket and object-store client. Disable SlateDB's own WAL with
+  `wal_disable`, following vlpds.
+- Continue logging deterministic rules commands and re-running them on
+  replay. For other operations, log the actual key-value mutations and
+  firehose events, then reapply those on replay. This includes World
+  creation, key custody, repo commits, Space changes and OAuth state.
+- Run every operation in order on one writer. Stage its changes in an
+  overlay, append the batch as one log segment, then apply it to SlateDB as
+  one batch with the applied marker. Use the segment position as SlateDB's
+  sequence number. Return outcomes only after these steps. Acknowledgment
+  still depends on log durability: SlateDB may lag the log but must never
+  contain changes absent from it.
+- When state has changed, checkpoint about every ten seconds. Write rules
+  snapshots and the applied marker, then flush the memtable to limit the
+  work needed on replay.
+- Stop the shard if either the log's create-only write or SlateDB's writer
+  epoch shows that another writer has taken over. Also stop on any SlateDB
+  error after a durable log append; replay repairs the incomplete application.
+- Store sealed key material in SlateDB. Seal it with XChaCha20-Poly1305 under
+  the tenor's master key, and keep that master key outside the bucket.
 
 ## Consequences
 
-- Upgrading SlateDB is stepwise: it only promises storage compatibility
-  between adjacent versions, so the pin is exact and an upgrade needs a
-  format fixture test.
-- SeaweedFS isn't in SlateDB's tested store list. The integration tests
-  (open, write, checkpoint, reopen; takeover) are what establish that it
-  works for us.
-- Log compaction becomes possible below the applied marker; it isn't built
-  yet.
+SlateDB only promises storage compatibility between adjacent versions.
+Keep the exact version pin, upgrade one version at a time and test upgrades
+against a stored-format fixture.
+
+SeaweedFS is not on SlateDB's tested store list. Motet's integration tests
+must check opening, writing, checkpointing, reopening and writer takeover.
+
+The applied marker makes it possible to compact older log entries, but that
+compaction is not built yet.
 
 ## Revisit when
 
-SlateDB's pluggable WAL (RFC 0030) is stable and the log could be that WAL
+SlateDB's pluggable WAL (RFC 0030) becomes stable and can use Motet's log
 directly, or multi-node tenors need vlpds's lease and span machinery.

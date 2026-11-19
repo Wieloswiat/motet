@@ -1,4 +1,4 @@
-# 0020. AppView-backed web screens
+# 0020. Use real AppView data on working screens
 
 Status: Accepted. Supersedes the demo-route and demo-data decisions in
 [0012](0012-design-system-and-demo-screens.md); its design-system and Theme
@@ -6,32 +6,33 @@ Creator decisions still stand.
 
 ## Context
 
-The AppView now provides authenticated browser sessions, public World and
-scene projections, and procedures for World creation, scenes and posts. The
-browser holds a World's owner rotation key. Demo screens cannot honestly
-represent this workflow or its authorization and admission outcomes.
+The AppView now supplies browser sessions, public World and scene projections,
+and methods to create Worlds, manage scenes and post. The browser holds the
+owner's World rotation key. Sample-data screens cannot show whether these
+actions were authorized or a post was admitted.
 
 ## Decision
 
-Sign-in, World creation, World overview, scene lists and scenes use the
-AppView. Real routes never fall back to sample World or post data. The
-remaining design-export studies retain their demo content and are labelled
-as such on `/design`.
+Use the AppView for sign-in, World creation, World overview, scene lists and
+scenes. Never fall back to sample Worlds or posts on real routes. Keep the
+remaining design demos and label them on `/design`.
 
-Browser mutations use the shared HTTPS origin and its session cookie. Server
-loads query the configured `MOTET_APPVIEW_PUBLIC_ORIGIN`, not the request's
-Host header, before forwarding cookies. The owner key and backup passphrase
-remain in the browser. Setup finishes only after the downloaded encrypted
-backup has been re-imported and verified.
+Send browser mutations to the shared HTTPS origin with the session cookie.
+For server-side loads, forward cookies only to the configured
+`MOTET_APPVIEW_PUBLIC_ORIGIN`, never to an origin taken from the request's
+Host header.
 
-The AppView does not yet project World theme records. Real screens use
-Motet's default appearance rather than a demo World's theme. Compile a real
-World's theme for the server-rendered first paint when theme records become
-available.
+Keep the owner key and backup passphrase in the browser. Do not mark setup
+complete until the user has downloaded the encrypted backup, re-imported it
+and verified it.
+
+Use Motet's default appearance on real screens. World theme records are not
+yet projected, so a demo theme would misrepresent the World. When those
+records become available, compile the real theme on the server for the
+first paint.
 
 ## Consequences
 
-The AppView and its projections determine what the reader sees, so a newly
-created World, scene or admitted post can take time to appear. The gallery
-covers only the screens that still show samples; browser journey tests cover
-the real routes.
+Readers see AppView projections, not immediate results of writes. A newly
+created World, scene or admitted post may take time to appear. Gallery tests
+cover only screens with sample data; browser journeys cover the real routes.

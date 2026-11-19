@@ -1,31 +1,35 @@
-# 0008. Typst in a sandboxed worker; static SVG until typst.ts
+# 0008. Render Typst posts in a separate, restricted process
 
 Status: Accepted
 
 ## Context
 
-Posts are written in Typst, which is untrusted input to a full typesetting
-system: it can loop, allocate, and load WebAssembly plugins. The backend plan
-targets typst.ts's vector artifacts drawn in the browser, which follows a
-patched Typst whose versions lag the upstream compiler.
+Posts contain untrusted Typst code. The typesetting system can loop, consume
+memory and load WebAssembly plugins. Running it in a server process would
+put that server at risk.
+
+The backend plan calls for typst.ts vector artifacts rendered in the browser.
+That library uses a patched Typst version that can lag the upstream compiler.
 
 ## Decision
 
-- `motet-render` compiles in a separate process (`motet-render-worker`)
-  started with a clean environment, address-space and CPU rlimits, a
-  wall-clock timeout and an output cap. Those limits, not a package denylist,
-  are the execution boundary.
-- The compiler's world sees only the post's source, bundled fonts and
-  Motet's package mirror, with the date fixed to the post's own. No file or
-  network access.
-- Output is cached under a `RenderKey` naming the source, compiler version,
-  security-policy version and layout, so an upgrade re-renders instead of
-  serving stale output.
-- For now the worker produces static SVG with upstream `typst`. Moving to
-  typst.ts vector artifacts replaces the output format and pins the worker's
-  Typst to typst.ts's; the sandbox and supervisor stay.
+Compile posts in a separate, restricted `motet-render-worker` process managed
+by `motet-render`.
+
+- Start the worker with a clean environment, address-space and CPU rlimits,
+  a wall-clock timeout and an output-size cap. These limits contain hostile
+  code; a package denylist is not a substitute.
+- Give the compiler access only to the post source, bundled fonts and
+  Motet's package mirror. Fix its date to the post's date. Do not allow file
+  or network access outside those inputs.
+- Cache output by `RenderKey`, which includes source, compiler version,
+  security-policy version and layout. A change to any of these must cause
+  a new render rather than return stale output.
+- Produce static SVG with upstream `typst` for now. Later, switch to typst.ts
+  vector artifacts and its required Typst version. Keep the sandbox and
+  worker supervisor when the format changes.
 
 ## Revisit when
 
-The typst.ts spike in Groundwork (two widths, both themes, a screen reader)
-is done.
+Groundwork's typst.ts experiment has tested two widths, both themes and a
+screen reader.

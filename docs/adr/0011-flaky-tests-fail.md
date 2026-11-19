@@ -5,25 +5,22 @@ Status: Accepted. Supersedes the retry result in
 
 ## Context
 
-[ADR 0005](0005-testing.md) gave nextest's `ci` profile one retry and said
-the report makes flakiness visible. By default nextest counts a test that
-fails and then passes on its retry as flaky, and a flaky test doesn't fail
-the run. The report is in the summary and in `junit.xml`, but the run is
-green, so nothing makes anyone read it. A flaky test can hide a race in the
-code as easily as a fault in the test.
+[ADR 0005](0005-testing.md) gave nextest's `ci` profile one retry. By default,
+nextest calls a test flaky if it fails and then passes, but still passes the
+run. The summary and `junit.xml` show the failure, yet a green build gives
+no reason to investigate it. An intermittent failure may be a race in the
+product, not just a faulty test.
 
 ## Decision
 
-- The `ci` profile keeps its one retry. The retry shows whether a failure
-  repeats, which helps to find the cause.
-- A test that passes only on its retry fails the run
-  (`flaky-result = "fail"`, nextest 0.9.131 or later). JUnit reports it as a
-  failure and marks it flaky.
-- The cause gets fixed, in the test or in the code. More retries, sleeps,
-  longer timeouts, skipped tests or quarantine don't count as a fix.
+Keep the retry for diagnosis, but fail CI when a test needs it to pass.
+
+- Set `flaky-result = "fail"`, which requires nextest 0.9.131 or later.
+  JUnit then reports the test as a failure and marks it flaky.
+- Fix the cause in the test or production code. More retries, sleeps, longer
+  timeouts, skipped tests and quarantine do not count as fixes.
 
 ## Consequences
 
-A flaky test blocks merging until it is fixed, like any other failing test.
-The integration profile has no retries, so a failure there already fails the
-run.
+A flaky test blocks merging like any other failing test. The integration
+profile has no retries, so its failures already fail the run.

@@ -1,32 +1,34 @@
-# 0006. Fenced logs in object storage; SeaweedFS for development
+# 0006. Keep durable logs in object storage
 
 Status: Accepted
 
 ## Context
 
-Tenors must be easy to self-host and their nodes disposable; the AppView's
-projections must rebuild without re-crawling the network. Both need a
-durable, ordered record of what was decided, in storage a self-hoster can
-rent (R2, S3).
+A tenor must keep working after its node is replaced. The AppView must be
+able to rebuild its database without crawling the network again. Both need
+an ordered, durable history in storage a self-hoster can rent, such as R2 or
+S3.
 
 ## Decision
 
-- `motet-log`: segments in a bucket, written with conditional puts so exactly
-  one writer can append at a given position. A second writer fences the
-  first. A write whose outcome is unknown is reconciled by reading it back,
-  never retried blindly. Writers batch (group commit), and nothing is
-  acknowledged before its segment is durable.
-- The tenor keeps each shard's World commands in such a log
-  (`tenor::shard`); state in memory is what replaying it gives. SlateDB for
-  current state and replay checkpoints comes later and doesn't change this
-  contract.
-- The AppView archives every verified record to a log before applying it to
+Use `motet-log` to store that history as segments in an object-storage bucket.
+
+- Append segments with conditional writes so only one writer can occupy a
+  given position. When a second writer takes over, the old writer must be
+  unable to continue; this is fencing. If a write's result is unknown, read
+  it back to find out whether it succeeded rather than retry it blindly.
+- Batch entries into segments, also called group commit. Do not acknowledge
+  an entry until its segment is durable.
+- Store each tenor shard's World commands in this log (`tenor::shard`).
+  Rebuild its in-memory state by replay. Add SlateDB for current state and
+  replay checkpoints later without changing the durability rule.
+- Archive every verified AppView record to a log before applying it to
   PostgreSQL.
-- Development and CI use SeaweedFS's S3 gateway. MinIO was abandoned upstream
-  and nixpkgs marks it insecure. The fencing tests double as a check that the
-  store honours conditional writes.
+- Use SeaweedFS's S3 gateway in development and CI. MinIO was abandoned
+  upstream and nixpkgs marks it insecure. The fencing tests also check that
+  the store enforces conditional writes.
 
 ## Revisit when
 
-Multi-node tenors (takeover between nodes on one bucket), and log compaction
-with erasure requests.
+Tenors need takeover between multiple nodes using one bucket, or log
+compaction must account for erasure requests.

@@ -1,27 +1,31 @@
-# 0003. A Rust workspace and a pnpm workspace in one repository
+# 0003. Keep Rust and web code in one repository
 
 Status: Accepted
 
 ## Context
 
-The backend is Rust (the backend plan's "Language" section); the web app is
-TypeScript. Lexicons feed both, and changes often cross the line.
+The backend uses Rust, as chosen in the backend plan's Language section.
+The web app uses TypeScript. Both use the same lexicons, and a change often
+needs code in both languages.
 
 ## Decision
 
-- One repository. `crates/*` is a Cargo workspace; `apps/*` and `packages/*`
-  are a pnpm workspace. `lexicons/` is shared and generates into both.
-- Crates are split by responsibility and by what must stay pure:
-  `motet-rules` and `motet-dice` have no I/O, so their properties can be
-  tested exhaustively; `motet-log`, `motet-net` and `motet-xrpc` each own one
-  boundary; the binaries (`motet-appview`, `motet-tenor`) compose them.
-- Shared dependency versions and lints live in the workspace `Cargo.toml`;
-  crates say `workspace = true`. Clippy's pedantic group is on and warnings
-  are errors.
-- Formatting and linting for the web packages are configured once at the
-  root (Prettier, ESLint flat config, `tsconfig.base.json`).
+Keep the backend, web app and lexicons in one repository.
+
+- Use a Cargo workspace for `crates/*` and a pnpm workspace for `apps/*` and
+  `packages/*`. Generate types for both from `lexicons/`.
+- Separate crates by responsibility. Keep `motet-rules` and `motet-dice`
+  free of I/O so their logic can be tested without services, including
+  exhaustive tests where practical. Let `motet-log` own durable logging,
+  `motet-net` own outbound networking and `motet-xrpc` own XRPC serving.
+  The `motet-appview` and `motet-tenor` binaries combine these libraries.
+- Put shared dependency versions and lints in the root `Cargo.toml`.
+  Crates inherit them with `workspace = true`. Enable Clippy's pedantic
+  group and treat warnings as errors.
+- Configure Prettier, ESLint flat config and `tsconfig.base.json` once at
+  the root for the web packages.
 
 ## Consequences
 
-A new crate starts by inheriting lints and versions. Anything that needs the
-network or a database is kept out of `rules` and `dice`.
+New crates inherit the workspace's dependency versions and lints. Code that
+needs a network or database does not belong in `rules` or `dice`.

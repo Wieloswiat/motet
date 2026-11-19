@@ -4,31 +4,30 @@ Status: Accepted
 
 ## Context
 
-The licence decides what self-hosters of a tenor may do, whether ParadeDB's
-AGPL-3.0 community edition fits, and what the legal review in Running Worlds
-must cover (hosting, rendering, migration and archives of people's writing).
-Until this decision, no code depended on the answer.
+Motet needs a code licence before dependencies and distribution rely on it.
+The choice affects tenor self-hosters and the use of ParadeDB's AGPL-3.0
+community edition. It does not settle the rights to users' writing.
 
 ## Decision
 
-Motet's own code is MIT. The repository root holds the standard MIT text in
-[LICENSE](../../LICENSE), copyright 2026 the Motet contributors.
+License Motet's own code under MIT. The root [LICENSE](../../LICENSE)
+contains the standard MIT text, copyright 2026 the Motet contributors.
 
-- Crates and packages stay `publish = false` / `"private": true` until a
-  release decision. Publishing is a separate decision from licensing.
-- `deny.toml` keeps its allow list. Permissive licences and weak copyleft such
-  as MPL-2.0 are all compatible with distributing Motet under MIT.
-- ParadeDB's AGPL-3.0 community edition runs as a separate database service.
-  That does not change Motet's licence. An operator who modifies ParadeDB must
-  meet the AGPL obligations for that modified ParadeDB.
-- Vendored third-party code keeps its own licence. `tools/oxlint/anti-slop` is
-  MIT and keeps its LICENSE files.
-- The vendored opensocial.group lexicons still have no upstream licence
-  ([lexicons/README.md](../../lexicons/README.md)). This item stays open.
-- The legal review in Running Worlds still covers users' writing: hosting,
-  rendering, migration and archives. The code licence does not license
-  people's content.
+- Keep crates at `publish = false` and packages at `"private": true` until
+  a separate decision to publish them.
+- Keep the licence allow list in `deny.toml`. Permissive licences and weak
+  copyleft licences such as MPL-2.0 allow Motet to be distributed under MIT.
+- Run ParadeDB's AGPL-3.0 community edition as a separate database service.
+  This does not change Motet's licence. Operators must still meet ParadeDB's
+  AGPL obligations, including applicable distribution and source obligations.
+- Preserve vendored code's own licences. `tools/oxlint/anti-slop` is MIT and
+  retains its LICENSE files.
+- Leave the missing upstream licence for the vendored opensocial.group
+  lexicons unresolved; see [lexicons/README.md](../../lexicons/README.md).
+- Keep the legal review of users' writing in Running Worlds. It must cover
+  hosting, rendering, migration and archives. The code licence grants no
+  rights to that content.
 
 ## Revisit when
 
-A contributor agreement or a relicensing need makes these terms insufficient.
+A contributor agreement or a need to relicense requires different terms.

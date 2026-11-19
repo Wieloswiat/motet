@@ -1,39 +1,42 @@
-# 0016. A local atproto network in the dev shell, with patched indigo
+# 0016. Run an atproto network locally
 
 Status: Accepted
 
 ## Context
 
-The tenor must be crawled by a relay and read through Tap, players need PDS
-accounts with Spaces, and Worlds need a PLC directory. Tests against the public
-network aren't hermetic and can't run in CI. Upstream, only Tap is in nixpkgs;
-the PLC server, the relay, the reference PDS's Spaces alpha and atproto-crates'
-PDS aren't packaged or published as images. Indigo's relay and Tap refuse
-loopback addresses, and any port other than 80 or 443, through their SSRF
-transports, so out of the box they can't crawl or backfill a local host.
+Local tests need a relay to crawl the tenor, Tap to deliver records, PDS
+accounts with Spaces for players and a PLC identity directory for Worlds.
+Depending on the public network would make those tests unsuitable for
+repeatable development and CI.
+
+Only Tap is packaged in nixpkgs. The PLC server, relay, reference PDS Spaces
+alpha and atproto-crates PDS are neither packaged nor published as images.
+Indigo's relay and Tap reject loopback hosts and ports other than 80 or 443
+as protection against server-side request forgery (SSRF), so they cannot
+crawl or backfill the local services without changes.
 
 ## Decision
 
-- `devenv up` runs a PLC directory (in memory), indigo's relay and Tap from
-  one pinned indigo revision, the reference PDS from the Spaces alpha (the
-  2026-10-22 `permissioned-data` merge), and atproto-crates' PDS at the same
-  revision as the crates. They run beside PostgreSQL and SeaweedFS, and the
-  compose stack runs the same builds.
-- Players get accounts on both PDSes, so interop with a second Spaces
-  implementation is tested from the start.
-- Relay and Tap carry a small patch, kept in `nix/patches/`, that allows
-  private hosts only when an explicit development flag is set. The flag is
-  off by default, and the patch is reviewed whenever the indigo pin moves.
-- Everything is built by nix from pinned sources. Nothing is fetched at
-  runtime.
+Run a pinned local atproto network alongside PostgreSQL and SeaweedFS.
+
+- Make `devenv up` start an in-memory PLC directory, indigo's relay and Tap
+  from one pinned indigo revision, the reference PDS at the 2026-10-22
+  `permissioned-data` Spaces-alpha merge, and atproto-crates' PDS at the same
+  revision as Motet's libraries. Use the same builds in the compose stack.
+- Give players accounts on both PDSes so tests exercise two independent
+  Spaces implementations from the start.
+- Patch the relay and Tap to allow private hosts only with an explicit
+  development flag. Keep it off by default, store the patch in `nix/patches/`
+  and review it whenever the indigo pin changes.
+- Build everything with Nix from pinned sources. Fetch nothing at runtime.
 
 ## Consequences
 
-- The dev shell and CI build Go and Node workspaces; first builds are slow
-  and cached afterwards.
-- The patch is Motet's to carry until upstream has an equivalent option.
+The dev environment and CI must build Go and Node workspaces. First builds
+are slow; later builds use the cache. Motet must maintain the private-host
+patch until upstream provides an equivalent option.
 
 ## Revisit when
 
-Indigo gains a development mode for private hosts, the Spaces alpha merges to
-`main` with published images, or atproto-crates' PDS is packaged upstream.
+Indigo supports private hosts in a development mode, the Spaces alpha merges
+to `main` with published images, or upstream packages atproto-crates' PDS.
