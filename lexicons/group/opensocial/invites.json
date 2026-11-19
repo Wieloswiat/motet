@@ -6,6 +6,7 @@
       "type": "space",
       "description": "A user's invite inbox. Groups write invites into it; only the user reads it.",
       "key": "literal:self",
+      "title": "Group invites",
       "name": "Group invites",
       "collections": ["group.opensocial.invite"]
     }

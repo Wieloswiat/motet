@@ -51,6 +51,11 @@ ordering with those source files, and run consumer-verification and event-replay
 covering-proof tests exercise the producer contract; they are not a claim of
 formal proof or an implementation of a general Sync 1.1 verifier.
 
+Space type declarations in `lexicons/` carry both `title`, the November 12
+Spaces alpha name, and `name`, which this revision's `atproto-lexicon` and the
+local PDS still require. Remove `name` once the pinned parser accepts a
+declaration without it.
+
 ## Upstream licence
 
 MIT License

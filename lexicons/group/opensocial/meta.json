@@ -6,6 +6,7 @@
       "type": "space",
       "description": "The group's public face: profile, rules, and label definitions. Often public.",
       "key": "literal:self",
+      "title": "Group info",
       "name": "Group info",
       "collections": [
         "group.opensocial.profile",

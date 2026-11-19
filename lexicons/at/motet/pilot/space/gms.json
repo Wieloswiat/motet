@@ -6,6 +6,7 @@
 		"main": {
 			"type": "space",
 			"key": "literal:self",
+			"title": "World GMs",
 			"name": "World GMs",
 			"collections": ["group.opensocial.access", "at.motet.pilot.audit"]
 		}
