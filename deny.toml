@@ -26,11 +26,6 @@ ignore = [
   # bound both denial-of-service flaws.
   { id = "RUSTSEC-2026-0194", reason = "quick-xml via typst-library; bounded by the render worker's limits" },
   { id = "RUSTSEC-2026-0195", reason = "quick-xml via typst-library; bounded by the render worker's limits" },
-  # hickory 0.25 in atproto-identity's handle resolution. Motet doesn't
-  # enable DNSSEC validation (0118), and a lookup encodes one short name (0119); the fix
-  # needs hickory 0.26 upstream.
-  { id = "RUSTSEC-2026-0118", reason = "hickory-proto via atproto-identity; DNSSEC validation not enabled" },
-  { id = "RUSTSEC-2026-0119", reason = "hickory-proto via atproto-identity; needs atproto-identity on hickory 0.26" },
 ]
 
 [licenses]
